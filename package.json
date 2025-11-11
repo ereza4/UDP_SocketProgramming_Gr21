@@ -1,0 +1,11 @@
+{
+  "name": "udp_socketprogramming_gr21",
+  "version": "1.0.0",
+  "description": "UDP Socket Programming Project - Group 21",
+  "main": "server/server.js",
+  "scripts": {
+    "server": "node server/server.js",
+    "client": "node client/client.js"
+  },
+  "author": "Group 21"
+}

@@ -52,7 +52,7 @@ function sendToServer(text) {
   });
 }
 
-const CLIENT_FILES = path.join(__dirname, "../shared/client_files");
+const CLIENT_FILES = path.resolve(__dirname, "../shared/client_files");
 fs.mkdirSync(CLIENT_FILES, { recursive: true });
 
 const CHUNK_SIZE = 4096;
@@ -61,7 +61,7 @@ const incomingDownloads = new Map();
 client.on("message", (msg, rinfo) => {
   const text = msg.toString().trim();
   if (text.startsWith("UPLOAD_ACK_START|")) {
-    console.log(`[INFO] Server acknowledged start: ${text.split("|")[1]}`);
+    console.log(`[INFO] Serveri konfirmoi fillimin: ${text.split("|")[1]}`);
     return;
   }
   if (text.startsWith("DOWNLOAD_START|")) {
@@ -69,7 +69,7 @@ client.on("message", (msg, rinfo) => {
     const filename = parts[1];
     const total = Number(parts[2]);
     incomingDownloads.set(filename, { total, chunks: [] });
-    console.log(`[INFO] Incoming download: ${filename} (${total} chunks)`);
+    console.log(`[INFO] Duke shkarkuar: ${filename} (${total} pjesë)`);
     return;
   }
   if (text.startsWith("DOWNLOAD_DATA|")) {
@@ -86,7 +86,7 @@ client.on("message", (msg, rinfo) => {
     const filename = text.split("|")[1];
     const st = incomingDownloads.get(filename);
     if (!st) {
-      console.log(`[ERROR] No download state for ${filename}`);
+      console.log(`[ERROR] Mungon gjendja e shkarkimit për ${filename}`);
       return;
     }
     const outPath = path.join(CLIENT_FILES, filename);
@@ -96,14 +96,14 @@ client.on("message", (msg, rinfo) => {
     }
     ws.end();
     incomingDownloads.delete(filename);
-    console.log(`[OK] Download complete: ${filename} -> ${outPath}`);
+    console.log(`[OK] Shkarkimi përfundoi: ${filename} -> ${outPath}`);
     return;
   }
   console.log(`\nNga serveri (${rinfo.address}:${rinfo.port}): ${text}`);
 });
 
 client.on("error", (err) => {
-  console.error("Client error:", err.message);
+  console.error("Gabim në klient:", err.message);
   client.close();
   rl.close();
 });
@@ -137,12 +137,12 @@ function startInputLoop() {
     const arg = parts.slice(1).join(" ");
     if (cmd === "/upload") {
       if (currentUser.role !== "admin") {
-        console.log("[ERROR] Only admin can upload files.");
+        console.log("[ERROR] Vetëm admin mund të ngarkojë file.");
         rl.prompt();
         return;
       }
       if (!arg) {
-        console.log("[ERROR] /upload <filename> required (file must be in shared/client_files).");
+        console.log("[ERROR] /upload <filename> kërkohet (file duhet të jetë në shared/client_files).");
         rl.prompt();
         return;
       }
@@ -152,12 +152,12 @@ function startInputLoop() {
     }
     if (cmd === "/download") {
       if (currentUser.role !== "admin") {
-        console.log("[ERROR] Only admin can download files.");
+        console.log("[ERROR] Vetëm admin mund të shkarkojë file.");
         rl.prompt();
         return;
       }
       if (!arg) {
-        console.log("[ERROR] /download <filename> required.");
+        console.log("[ERROR] /download <filename> kërkohet.");
         rl.prompt();
         return;
       }
@@ -167,12 +167,12 @@ function startInputLoop() {
     }
     if (cmd === "/delete") {
       if (currentUser.role !== "admin") {
-        console.log("[ERROR] Only admin can delete files.");
+        console.log("[ERROR] Vetëm admin mund të fshijë file.");
         rl.prompt();
         return;
       }
       if (!arg) {
-        console.log("[ERROR] /delete <filename> required.");
+        console.log("[ERROR] /delete <filename> kërkohet.");
         rl.prompt();
         return;
       }
@@ -220,7 +220,7 @@ function startUpload(filename) {
     sendToServer(`UPLOAD_DATA|${filename}|${i}|${chunk.toString("base64")}`);
   }
   sendToServer(`UPLOAD_END|${filename}`);
-  console.log(`[INFO] Upload sent for ${filename}`);
+  console.log(`[INFO] Upload u dërgua për ${filename}`);
 }
 
 client.bind();

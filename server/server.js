@@ -38,7 +38,7 @@ function registerClient(address, port, privilege = "user") {
   }
   if (clients.size >= MAX_CLIENTS) {
     console.log(
-      `[WARN] Maximal capacity. New client refused: ${key}`
+      `[WARN] Kapacitet maksimal. Klient i ri u refuzua: ${key}`
     );
     return false;
   }
@@ -51,7 +51,7 @@ function registerClient(address, port, privilege = "user") {
     bytesSent: 0,
   });
   clientPrivileges.set(key, privilege);
-  console.log(`[INFO] New client registered: ${key} with privilege: ${privilege}`);
+  console.log(`[INFO] Klient i ri u regjistrua: ${key} me privilegj: ${privilege}`);
   return true;
 }
 
@@ -86,7 +86,7 @@ function sendMessage(message, rinfo) {
   const doSend = () => {
     server.send(buffer, 0, buffer.length, rinfo.port, rinfo.address, (err) => {
       if (err) {
-        console.error("[ERROR] While sending response:", err.message);
+        console.error("[ERROR] Gjatë dërgimit të përgjigjes:", err.message);
         return;
       }
 
@@ -131,7 +131,7 @@ function writeStatsToFile() {
   const stats = buildStatsString();
   fs.writeFile(STATS_FILE, stats, (err) => {
     if (err) {
-      console.error("[ERROR] server_stats.txt is not updated:", err.message);
+      console.error("[ERROR] server_stats.txt nuk u përditësua:", err.message);
     }
   });
 }
@@ -210,7 +210,7 @@ server.on("message", (msg, rinfo) => {
   }
 
   const accepted = registerClient(rinfo.address, rinfo.port, role);
-  if (!accepted) return sendMessage("ERROR: Server capacity reached. Try again later.", rinfo);
+  if (!accepted) return sendMessage("ERROR: Kapaciteti i serverit u mbush. Provoni më vonë.", rinfo);
 
   totalBytesReceived += msg.length;
   updateClientOnMessage(rinfo.address, rinfo.port, msg.length);
@@ -222,6 +222,7 @@ server.on("message", (msg, rinfo) => {
     const filename = parts[1];
     const total = Number(parts[2]) || 0;
     uploadStates.set(clientKey, { filename, total, chunks: [] });
+    console.log(`[UPLOAD] ${user} filloi upload të file "${filename}" (${total} pjesë)`);
     return sendMessage(`UPLOAD_ACK_START|${filename}`, rinfo);
   }
 
@@ -256,6 +257,7 @@ server.on("message", (msg, rinfo) => {
     }
     ws.end();
     uploadStates.delete(clientKey);
+    console.log(`[UPLOAD] ${user} përfundoi upload të file "${filename}" -> ${outPath}`);
     return sendMessage(`[OK] Upload i file "${filename}" përfundoi.`, rinfo);
   }
 
@@ -325,7 +327,7 @@ server.on("message", (msg, rinfo) => {
       sendMessage(buildStatsString(), rinfo);
       break;
     default:
-      sendMessage(`Echo from server: "${message}"`, rinfo);
+      sendMessage(`Përgjigje nga serveri: "${message}"`, rinfo);
   }
 });
 
@@ -335,7 +337,7 @@ setInterval(() => {
     const diff = now - client.lastActive;
     if (diff > INACTIVITY_TIMEOUT) {
       console.log(
-        `[INFO] Client ${key} is not active for ${diff}ms. is removed from active clients list.`
+        `[INFO] Klienti ${key} nuk është aktiv për ${diff}ms. U largua nga lista.`
       );
       clients.delete(key);
     }
@@ -348,13 +350,13 @@ setInterval(() => {
 
 server.on("listening", () => {
   const address = server.address();
-  console.log("UDP server is listening...");
-  console.log(`Address: ${address.address}`);
-  console.log(`Port:    ${address.port}`);
+  console.log("Serveri UDP po dëgjon...");
+  console.log(`Adresa: ${address.address}`);
+  console.log(`Porti:  ${address.port}`);
 });
 
 server.on("error", (err) => {
-  console.error("[ERROR] Server error:", err.message);
+  console.error("[ERROR] Gabim në server:", err.message);
   server.close();
 });
 

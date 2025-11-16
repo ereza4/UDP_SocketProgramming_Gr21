@@ -1,21 +1,20 @@
-// server.js - Versioni i perditesuar 
-
 const dgram = require("dgram");
 const fs = require("fs");
 const path = require("path");
 
-const SERVER_PORT = 41234;          
-const SERVER_HOST = "0.0.0.0";      
+const SERVER_PORT = 41234;
+const SERVER_HOST = "0.0.0.0";
 
-const MAX_CLIENTS = 4;             
-const INACTIVITY_TIMEOUT = 60_000;  
-const STATS_INTERVAL = 5_000;      
+const MAX_CLIENTS = 4;
+const INACTIVITY_TIMEOUT = 60_000;
+const STATS_INTERVAL = 5_000;
 
 const STATS_FILE = path.join(__dirname, "server_stats.txt");
 const FILES_FOLDER = path.join(__dirname, "../shared/server_files");
+fs.mkdirSync(FILES_FOLDER, { recursive: true });
 
 const clients = new Map();
-const clientPrivileges = new Map(); // admin ose user
+const clientPrivileges = new Map();
 
 let totalBytesReceived = 0;
 let totalBytesSent = 0;
@@ -26,21 +25,17 @@ function getClientKey(address, port) {
   return `${address}:${port}`;
 }
 
-function registerClient(address, port,privilege = "user") {
+function registerClient(address, port, privilege = "user") {
   const key = getClientKey(address, port);
-
-  
   if (clients.has(key)) {
     return true;
   }
-
   if (clients.size >= MAX_CLIENTS) {
     console.log(
       `[WARN] Maximal capacity. New client refused: ${key}`
     );
     return false;
   }
-
   clients.set(key, {
     address,
     port,
@@ -49,9 +44,7 @@ function registerClient(address, port,privilege = "user") {
     bytesReceived: 0,
     bytesSent: 0,
   });
-
-    clientPrivileges.set(key, privilege);
-
+  clientPrivileges.set(key, privilege);
   console.log(`[INFO] New client registered: ${key} with privilege: ${privilege}`);
   return true;
 }
@@ -65,7 +58,6 @@ function updateClientOnMessage(address, port, msgLength) {
   const key = getClientKey(address, port);
   const client = clients.get(key);
   if (!client) return;
-
   client.lastActive = Date.now();
   client.messages += 1;
   client.bytesReceived += msgLength;
@@ -75,19 +67,16 @@ function updateClientOnSend(address, port, bytesLength) {
   const key = getClientKey(address, port);
   const client = clients.get(key);
   if (!client) return;
-
   client.bytesSent += bytesLength;
 }
 
 function sendMessage(message, rinfo) {
   const buffer = Buffer.from(message);
-
   server.send(buffer, 0, buffer.length, rinfo.port, rinfo.address, (err) => {
     if (err) {
       console.error("[ERROR] While sending response:", err.message);
       return;
     }
-
     totalBytesSent += buffer.length;
     updateClientOnSend(rinfo.address, rinfo.port, buffer.length);
   });
@@ -95,12 +84,10 @@ function sendMessage(message, rinfo) {
 
 function buildStatsString() {
   const lines = [];
-
   lines.push("===== SERVER STATS =====");
   lines.push(`Time: ${new Date().toISOString()}`);
   lines.push(`Active clients: ${clients.size}`);
   lines.push("");
-
   for (const [key, client] of clients.entries()) {
     lines.push(`Client: ${key}`);
     lines.push(`  Privilege:      ${clientPrivileges.get(key)}`);
@@ -110,24 +97,22 @@ function buildStatsString() {
     lines.push(`  Last active:    ${new Date(client.lastActive).toLocaleString()}`);
     lines.push("");
   }
-
   lines.push("----- Totals -----");
   lines.push(`Total bytes received: ${totalBytesReceived}`);
   lines.push(`Total bytes sent:     ${totalBytesSent}`);
   lines.push("========================");
-
   return lines.join("\n");
 }
 
 function writeStatsToFile() {
   const stats = buildStatsString();
-
   fs.writeFile(STATS_FILE, stats, (err) => {
     if (err) {
       console.error("[ERROR] server_stats.txt is not updated:", err.message);
     }
   });
 }
+
 function handleListCommand(rinfo) {
   fs.readdir(FILES_FOLDER, (err, files) => {
     if (err) {
@@ -183,21 +168,109 @@ function handleSearchCommand(rinfo, keyword) {
       sendMessage(found.join("\n"), rinfo);
     }
   });
-}server.on("message", (msg, rinfo) => {
+}
+
+const CHUNK_SIZE = 4096;
+const uploadStates = new Map();
+
+server.on("message", (msg, rinfo) => {
   let message = msg.toString().trim();
   const clientKey = getClientKey(rinfo.address, rinfo.port);
 
-  const accepted = registerClient(rinfo.address, rinfo.port);
+  const prefixRegex = /^\[role=(.*?)\]\[user=(.*?)\]\s*/;
+  const m = message.match(prefixRegex);
+  let role = "user";
+  let user = "anon";
+  if (m) {
+    role = m[1];
+    user = m[2];
+  }
+
+  const accepted = registerClient(rinfo.address, rinfo.port, role);
   if (!accepted) return sendMessage("ERROR: Server capacity reached. Try again later.", rinfo);
 
   totalBytesReceived += msg.length;
   updateClientOnMessage(rinfo.address, rinfo.port, msg.length);
 
-  console.log(`[IN] From ${clientKey}: ${message}`);
-
-  // --- Pastrojmë prefix-in [role=...][user=...] ---
-  const prefixRegex = /^\[role=.*?\]\[user=.*?\]\s*/;
   message = message.replace(prefixRegex, "");
+
+  if (message.startsWith("UPLOAD_START|")) {
+    const parts = message.split("|");
+    const filename = parts[1];
+    const total = Number(parts[2]) || 0;
+    uploadStates.set(clientKey, { filename, total, chunks: [] });
+    return sendMessage(`UPLOAD_ACK_START|${filename}`, rinfo);
+  }
+
+  if (message.startsWith("UPLOAD_DATA|")) {
+    const parts = message.split("|");
+    const filename = parts[1];
+    const seq = Number(parts[2]);
+    const data64 = parts.slice(3).join("|");
+    const state = uploadStates.get(clientKey);
+    if (!state || state.filename !== filename) return;
+    state.chunks[seq] = Buffer.from(data64, "base64");
+    return;
+  }
+
+  if (message.startsWith("UPLOAD_END|")) {
+    const parts = message.split("|");
+    const filename = parts[1];
+    const state = uploadStates.get(clientKey);
+    if (!state || state.filename !== filename) {
+      return sendMessage(`[ERROR] Upload state missing for ${filename}`, rinfo);
+    }
+    const outPath = path.join(FILES_FOLDER, filename);
+    const ws = fs.createWriteStream(outPath);
+    for (let i = 0; i < state.total; i++) {
+      const chunk = state.chunks[i];
+      if (!chunk) {
+        ws.end();
+        uploadStates.delete(clientKey);
+        return sendMessage(`[ERROR] Mungon chunk #${i} për ${filename}`, rinfo);
+      }
+      ws.write(chunk);
+    }
+    ws.end();
+    uploadStates.delete(clientKey);
+    return sendMessage(`[OK] Upload i file "${filename}" përfundoi.`, rinfo);
+  }
+
+  if (message.startsWith("/download")) {
+    const filename = message.split(" ")[1];
+    if (!isAdmin(rinfo.address, rinfo.port)) {
+      return sendMessage("[ERROR] Nuk ke privilegje për të shkarkuar file.", rinfo);
+    }
+    const filePath = path.join(FILES_FOLDER, filename);
+    if (!fs.existsSync(filePath)) {
+      return sendMessage(`[ERROR] File "${filename}" nuk ekziston.`, rinfo);
+    }
+    const data = fs.readFileSync(filePath);
+    const total = Math.ceil(data.length / CHUNK_SIZE);
+    sendMessage(`DOWNLOAD_START|${filename}|${total}`, rinfo);
+    for (let i = 0; i < total; i++) {
+      const chunk = data.slice(i * CHUNK_SIZE, i * CHUNK_SIZE + CHUNK_SIZE);
+      sendMessage(`DOWNLOAD_DATA|${filename}|${i}|${chunk.toString("base64")}`, rinfo);
+    }
+    return sendMessage(`DOWNLOAD_END|${filename}`, rinfo);
+  }
+
+  if (message.startsWith("/delete")) {
+    if (!isAdmin(rinfo.address, rinfo.port)) {
+      return sendMessage("[ERROR] Nuk ke privilegje për të fshirë file.", rinfo);
+    }
+    const filename = message.split(" ")[1];
+    const filePath = path.join(FILES_FOLDER, filename);
+    if (!fs.existsSync(filePath)) {
+      return sendMessage(`[ERROR] File "${filename}" nuk ekziston.`, rinfo);
+    }
+    try {
+      fs.unlinkSync(filePath);
+    } catch (e) {
+      return sendMessage(`[ERROR] Fshirja dështoi për file "${filename}".`, rinfo);
+    }
+    return sendMessage(`[OK] File "${filename}" u fshi.`, rinfo);
+  }
 
   const parts = message.split(" ");
   const cmd = parts[0].toLowerCase();
@@ -227,14 +300,10 @@ function handleSearchCommand(rinfo, keyword) {
   }
 });
 
-
-
 setInterval(() => {
   const now = Date.now();
-
   for (const [key, client] of clients.entries()) {
     const diff = now - client.lastActive;
-
     if (diff > INACTIVITY_TIMEOUT) {
       console.log(
         `[INFO] Client ${key} is not active for ${diff}ms. is removed from active clients list.`
@@ -242,12 +311,11 @@ setInterval(() => {
       clients.delete(key);
     }
   }
-}, 5_000); 
+}, 5_000);
 
 setInterval(() => {
   writeStatsToFile();
 }, STATS_INTERVAL);
-
 
 server.on("listening", () => {
   const address = server.address();

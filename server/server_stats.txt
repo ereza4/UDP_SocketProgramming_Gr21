@@ -1,8 +1,0 @@
-===== SERVER STATS =====
-Time: 2025-11-14T18:21:15.526Z
-Active clients: 0
-
------ Totals -----
-Total bytes received: 70
-Total bytes sent:     55
-========================

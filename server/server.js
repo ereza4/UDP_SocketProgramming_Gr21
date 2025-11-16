@@ -299,6 +299,12 @@ server.on("message", (msg, rinfo) => {
   const cmd = parts[0].toLowerCase();
   const arg = parts.slice(1).join(" ");
 
+    console.log(
+    `[CMD] ${user} (role=${role}) from ${clientKey} executed: ${cmd}` +
+      (arg ? " " + arg : "")
+  );
+
+
   switch (cmd) {
     case "/list":
       handleListCommand(rinfo);

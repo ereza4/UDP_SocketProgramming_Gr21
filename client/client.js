@@ -19,22 +19,28 @@ const rl = readline.createInterface({
 });
 
 function printHelp() {
-  const role = currentUser.role || "user";
+  const role = (currentUser.role || "user").toLowerCase();
+
   console.log(`\nRoli aktual: ${role.toUpperCase()}`);
-  console.log("\nKomandat që mund t'i përdorësh me këtë rol:");
+  console.log("\nKomandat që mund t'i përdorësh:\n");
+
   console.log("  /help                    - Shfaq këtë listë komandash");
   console.log("  /quit                    - Mbyll klientin (nëse implementohet më vonë)");
+
   console.log("  /list                    -  Liston file-t në server");
   console.log("  /read <filename>         -  Lexon përmbajtjen e një file-i");
   console.log("  /search <keyword>        -  Kërkon në emrat e file-ve");
   console.log("  /info <filename>         -  Info për madhësinë/datat e file-it");
+
   if (role === "admin") {
     console.log("  /upload <filename>       -  Upload file në server");
     console.log("  /download <filename>     -  Download file nga serveri");
     console.log("  /delete <filename>       -  Fshin file nga serveri");
   }
+
   console.log("\nÇdo tekst tjetër dërgohet si mesazh i thjeshtë te serveri.\n");
 }
+
 
 function sendToServer(text) {
   const payload = `[role=${currentUser.role}][user=${currentUser.name}] ${text}`;

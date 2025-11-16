@@ -8,10 +8,16 @@ const SERVER_HOST = "0.0.0.0";
 const MAX_CLIENTS = 4;
 const INACTIVITY_TIMEOUT = 60_000;
 const STATS_INTERVAL = 5_000;
+const USER_RESPONSE_DELAY = 800; 
+
 
 const STATS_FILE = path.join(__dirname, "server_stats.txt");
-const FILES_FOLDER = path.join(__dirname, "../shared/server_files");
-fs.mkdirSync(FILES_FOLDER, { recursive: true });
+ const FILES_FOLDER = path.join(__dirname, "..", "shared", "server_files");
+
+if (!fs.existsSync(FILES_FOLDER)) {
+  fs.mkdirSync(FILES_FOLDER, { recursive: true });
+}
+
 
 const clients = new Map();
 const clientPrivileges = new Map();
@@ -72,15 +78,32 @@ function updateClientOnSend(address, port, bytesLength) {
 
 function sendMessage(message, rinfo) {
   const buffer = Buffer.from(message);
-  server.send(buffer, 0, buffer.length, rinfo.port, rinfo.address, (err) => {
-    if (err) {
-      console.error("[ERROR] While sending response:", err.message);
-      return;
-    }
-    totalBytesSent += buffer.length;
-    updateClientOnSend(rinfo.address, rinfo.port, buffer.length);
-  });
+
+  const key = getClientKey(rinfo.address, rinfo.port);
+  const privilege = clientPrivileges.get(key) || "user";
+  const isAdminClient = privilege === "admin";
+
+  const doSend = () => {
+    server.send(buffer, 0, buffer.length, rinfo.port, rinfo.address, (err) => {
+      if (err) {
+        console.error("[ERROR] While sending response:", err.message);
+        return;
+      }
+
+      totalBytesSent += buffer.length;
+      updateClientOnSend(rinfo.address, rinfo.port, buffer.length);
+    });
+  };
+
+  if (isAdminClient) {
+  
+    doSend();
+  } else {
+  
+    setTimeout(doSend, USER_RESPONSE_DELAY);
+  }
 }
+
 
 function buildStatsString() {
   const lines = [];
